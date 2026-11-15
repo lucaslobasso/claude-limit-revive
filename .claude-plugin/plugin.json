@@ -1,11 +1,20 @@
 {
   "name": "limit-revive",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "When the 5-hour usage limit passes a set percent with work unfinished, resume the session automatically at reset + N minutes.",
   "author": {
-    "name": "lucaslobasso"
+    "name": "Lucas Lobasso",
+    "url": "https://github.com/lucaslobasso"
   },
+  "homepage": "https://github.com/lucaslobasso/claude-limit-revive",
+  "repository": "https://github.com/lucaslobasso/claude-limit-revive",
   "license": "MIT",
+  "keywords": [
+    "usage",
+    "rate-limit",
+    "resume",
+    "automation"
+  ],
   "types": "./types/index.d.ts",
   "userConfig": {
     "thresholdPercent": {
@@ -40,7 +49,7 @@
     "windowsFallback": {
       "type": "boolean",
       "title": "Windows Task Scheduler fallback",
-      "description": "Also schedule a one-shot Windows task that reopens the session (claude --resume) if this window was closed.",
+      "description": "Windows only: also schedule a one-shot Task Scheduler job that reopens the session (claude --resume) if its window was closed. Ignored on macOS and Linux.",
       "default": true
     }
   }
