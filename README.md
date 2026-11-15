@@ -24,14 +24,18 @@ A Claude Code plugin that picks a session back up after the 5-hour usage limit r
 
 ## Install
 
-From a shell:
+In a Claude Code session:
+
+```
+/plugin install limit-revive --marketplace lucaslobasso/claude-limit-revive
+```
+
+Answer `y` to add the marketplace and pick the **user** scope (every project). Or from a shell:
 
 ```sh
 claude plugin marketplace add lucaslobasso/claude-limit-revive
 claude plugin install limit-revive@claude-limit-revive --scope user
 ```
-
-Or inside a Claude Code session: `/plugin marketplace add lucaslobasso/claude-limit-revive`, then `/plugin install limit-revive@claude-limit-revive`.
 
 It works from the next session on. Check it with `/limit-revive status`.
 
