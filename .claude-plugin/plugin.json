@@ -1,0 +1,47 @@
+{
+  "name": "limit-revive",
+  "version": "0.1.0",
+  "description": "When the 5-hour usage limit passes a set percent with work unfinished, resume the session automatically at reset + N minutes.",
+  "author": {
+    "name": "lucaslobasso"
+  },
+  "license": "MIT",
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "thresholdPercent": {
+      "type": "number",
+      "title": "Threshold (%)",
+      "description": "5-hour usage percent at which limit-revive gets involved.",
+      "default": 90
+    },
+    "delayMinutes": {
+      "type": "number",
+      "title": "Delay after reset (minutes)",
+      "description": "Minutes to wait after the 5-hour window resets before resuming.",
+      "default": 5
+    },
+    "mode": {
+      "type": "string",
+      "title": "Mode",
+      "description": "resume-only: never interrupt, resume only a turn that died on the limit. finish-turn: let the turn finish, hold new prompts until reset. stop-now: abort the running turn at the threshold and resume it later.",
+      "options": [
+        "resume-only",
+        "finish-turn",
+        "stop-now"
+      ],
+      "default": "resume-only"
+    },
+    "resumePrompt": {
+      "type": "string",
+      "title": "Resume prompt",
+      "description": "Text submitted to the session when it is revived.",
+      "default": "The usage limit has reset. Continue exactly where you left off."
+    },
+    "windowsFallback": {
+      "type": "boolean",
+      "title": "Windows Task Scheduler fallback",
+      "description": "Also schedule a one-shot Windows task that reopens the session (claude --resume) if this window was closed.",
+      "default": true
+    }
+  }
+}

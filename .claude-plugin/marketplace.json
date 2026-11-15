@@ -1,0 +1,11 @@
+{
+  "name": "claude-limit-revive",
+  "owner": { "name": "lucaslobasso" },
+  "plugins": [
+    {
+      "name": "limit-revive",
+      "source": "./",
+      "description": "Auto-resume a session after the 5-hour usage limit resets (+N minutes), only when work is unfinished."
+    }
+  ]
+}
