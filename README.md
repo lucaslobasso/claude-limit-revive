@@ -21,7 +21,7 @@ A Claude Code plugin that picks a session back up after the 5-hour usage limit r
 
 - Claude Code **2.1.3xx or newer** (`claude --version`), which has the function-hook plugin API (early access; it may change between releases).
 - A Claude subscription with a 5-hour usage window (Pro or Max). With API billing there is no window and the plugin stays idle.
-- Windows, macOS or Linux. The optional [Windows fallback](#windows-fallback) needs Windows Terminal (`wt.exe`).
+- Windows, macOS or Linux. The optional [Windows fallback](#windows-fallback) uses Windows Terminal (`wt.exe`) when it is installed.
 
 ## Install
 
@@ -95,14 +95,16 @@ See [CHANGELOG.md](CHANGELOG.md) for what changed.
 
 ### Windows fallback
 
-With `windowsFallback` on, Windows also gets a one-shot Task Scheduler job (`ClaudeLimitRevive_<id>`) 2 minutes after the in-session timer. It opens Windows Terminal with `claude --resume <session> "<prompt>"`, so the session comes back even if its window was closed. The in-session timer deletes the job before resuming, and the job deletes itself after it runs. On macOS and Linux the setting is ignored.
+With `windowsFallback` on, Windows also gets a one-shot Task Scheduler job (`ClaudeLimitRevive_<id>`) 2 minutes after the in-session timer. It opens Windows Terminal with `claude --resume <session> "<prompt>"`, so the session comes back even if its window was closed. A background session (agent view, `claude --bg`) is continued in the background instead, with `claude --bg --resume <session> "<prompt>"` and no window. The in-session timer deletes the job before resuming, and the job deletes itself after it runs. On macOS and Linux the setting is ignored.
+
+Background sessions depend on this fallback: Claude Code retires an idle background session after about an hour, and the in-session timer ends with it. Without the task (the setting off, or macOS and Linux) a background session resumes only if the reset comes before it is retired.
 
 ## Troubleshooting
 
 - **`/limit-revive` is an unknown command.** Start a new session after installing, and check that `claude plugin list` shows `limit-revive` enabled.
 - **"5-hour window: no reading yet".** Claude Code reports usage after the first reply of a session. Send any prompt.
 - **It didn't resume.** It only resumes unfinished work: a turn that finished normally cancels the timer by design. `/limit-revive status` shows what is scheduled.
-- **"Windows task not scheduled".** PowerShell or Task Scheduler refused the job (some managed PCs block it). The in-session timer still works while the window stays open; set `windowsFallback` to false to stop the notice.
+- **"Windows task not scheduled".** PowerShell or Task Scheduler refused the job (some managed PCs block it), or `claude` is not on your PATH. The in-session timer still works while the window stays open; set `windowsFallback` to false to stop the notice.
 - **A session opened by itself.** That is the Windows fallback reviving a session whose window was closed. Turn off `windowsFallback` if you don't want it.
 
 ## Uninstall

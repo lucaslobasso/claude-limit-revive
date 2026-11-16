@@ -25,10 +25,13 @@ const overrideAtom = atom({ plugin: 'limit-revive', key: 'overrideUntil' } as co
 
 // Registers the scheduled task. Values arrive through env vars, never through
 // string-built PowerShell, so paths and prompts need no escaping here.
+// LR_EXE is always a full path: Task Scheduler does not look a bare name up on
+// the user's PATH, where wt.exe and claude.exe are, and the task then ends
+// with 0x80070002 (file not found) without resuming anything.
 const PS_CREATE = [
   "$ErrorActionPreference = 'Stop'",
   '$at = [datetime]::Parse($env:LR_AT)',
-  "$action = New-ScheduledTaskAction -Execute 'wt.exe' -Argument $env:LR_ARGS",
+  '$action = New-ScheduledTaskAction -Execute $env:LR_EXE -Argument $env:LR_ARGS -WorkingDirectory $env:LR_CWD',
   '$trigger = New-ScheduledTaskTrigger -Once -At $at',
   "$trigger.EndBoundary = $at.AddHours(6).ToString('s')",
   '$settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -DeleteExpiredTaskAfter (New-TimeSpan -Minutes 1)',
@@ -48,9 +51,22 @@ const clockTime = (ms: number) => {
 }
 const fiveHourOf = (limits: readonly SessionRateLimit[]) =>
   limits.find(limit => limit.kind === 'five_hour')
-/** Safe inside a wt.exe argument line: no quotes, no `;` (wt's separator). */
+/**
+ * Safe inside a quoted argument of a wt.exe line: no quotes, no `;` (wt's
+ * separator), no backslash left at the end to swallow the closing quote.
+ */
 const forCommandLine = (text: string) =>
-  text.replace(/["`;]/g, '').replace(/\s+/g, ' ').trim().slice(0, 500)
+  text.replace(/["`;]/g, '').replace(/\s+/g, ' ').trim().slice(0, 500).replace(/\\+$/, '')
+/** Of `where.exe`'s matches, one Task Scheduler can start: an .exe, else a .cmd or .bat. */
+const pickExecutable = (stdout: string) => {
+  const found = stdout
+    .split(/\r?\n/)
+    .map(line => line.trim())
+    .filter(Boolean)
+  return (
+    found.find(path => /\.exe$/i.test(path)) ?? found.find(path => /\.(cmd|bat)$/i.test(path))
+  )
+}
 
 const REASON_TEXT: Record<PendingReason, string> = {
   'limit-error': 'turn stopped at the limit',
@@ -69,13 +85,17 @@ let cfg = {
 
 // The fallback uses Task Scheduler, so it only runs on Windows (set at session start).
 let isWindows = false
+// A background session (agent view, `claude --bg`) has no window, and its
+// process is retired after about an hour idle: the in-session timer dies with
+// it, so only the OS task can bring it back, and it must do so in the background.
+let isBackground = false
 
 // Module variables start over on a reload; the durable parts live in $.state.
 let timer: Timer | undefined
 let mainTurnId: string | undefined
 let fiveHour: SessionRateLimit | undefined
 let cwd = ''
-let claudeExe: string | undefined
+const exePaths = new Map<string, string | undefined>()
 
 async function setPending($: EngineInterface, value: Pending | null) {
   await update($, pendingAtom, () => value)
@@ -116,16 +136,32 @@ async function readTasks($: EngineInterface) {
 return ((await $.store.get(TASKS_KEY)) ?? {}) as Record<string, OsTask>
 }
 
-async function resolveClaude($: EngineInterface) {
-  if (claudeExe) return claudeExe
+/** The full path of a command on the user's PATH, or undefined when it has none. */
+async function resolveExe($: EngineInterface, command: string) {
+  if (exePaths.has(command)) return exePaths.get(command)
+  let path: string | undefined
   try {
-    const { exitCode, stdout } = await $.process.run(['where.exe', 'claude'])
-    const first = stdout.split(/\r?\n/).find(line => line.trim())
-    claudeExe = exitCode === 0 && first ? first.trim() : 'claude'
+    const { exitCode, stdout } = await $.process.run(['where.exe', command])
+    if (exitCode === 0) path = pickExecutable(stdout)
   } catch {
-    claudeExe = 'claude'
+    // Not found.
   }
-  return claudeExe
+  exePaths.set(command, path)
+  return path
+}
+
+/** What the scheduled task starts, every executable by its full path. */
+async function fallbackAction($: EngineInterface, sessionId: string, prompt: string) {
+  const claude = await resolveExe($, 'claude')
+  if (!claude) return undefined
+  if (isBackground) {
+    // Continues the background session under its own id, with no window.
+    return { exe: claude, args: `--bg --resume ${sessionId} "${prompt}"` }
+  }
+  const wt = await resolveExe($, 'wt')
+  return wt
+    ? { exe: wt, args: `-d "${cwd}" "${claude}" --resume ${sessionId} "${prompt}"` }
+    : { exe: claude, args: `--resume ${sessionId} "${prompt}"` }
 }
 
 async function scheduleOsTask($: EngineInterface, pending: Pending) {
@@ -134,12 +170,21 @@ async function scheduleOsTask($: EngineInterface, pending: Pending) {
     const name = TASK_PREFIX + sessionId.slice(0, 8)
     const at = pending.resumeAt + OS_GRACE_MS
     const prompt = forCommandLine(pending.heldText ?? cfg.resumePrompt)
-    const exe = await resolveClaude($)
-    const args = `-d "${cwd}" "${exe}" --resume ${sessionId} "${prompt}"`
+    const action = await fallbackAction($, sessionId, prompt)
+    if (!action) {
+      $.ui.toast(`${PLUGIN}: Windows task not scheduled: claude was not found on PATH.`)
+      return undefined
+    }
     const run = await $.process.run(
       ['powershell.exe', '-NoProfile', '-NonInteractive', '-Command', PS_CREATE],
       {
-        env: { LR_AT: new Date(at).toISOString(), LR_ARGS: args, LR_NAME: name },
+        env: {
+          LR_AT: new Date(at).toISOString(),
+          LR_EXE: action.exe,
+          LR_ARGS: action.args,
+          LR_CWD: cwd,
+          LR_NAME: name,
+        },
         timeoutMs: 30_000,
       },
     )
@@ -207,6 +252,11 @@ async function arm(
   $.ui.toast(
     `${PLUGIN}: ${REASON_TEXT[reason]}; resuming at ${clockTime(pending.resumeAt)}.`,
   )
+  if (isBackground && !pending.taskName) {
+    $.ui.toast(
+      `${PLUGIN}: a background session is retired when idle; without the Windows task it may not resume.`,
+    )
+  }
   return pending
 }
 
@@ -270,6 +320,7 @@ export const register: Register = (on, options) => {
   on('session.start', async ($, e, next) => {
     cwd = e.cwd
     isWindows = (await $.env.get('OS')) === 'Windows_NT'
+    isBackground = Boolean(await $.env.get('CLAUDE_JOB_DIR'))
     await $.command.register({
       name: PLUGIN,
       description: 'Auto-resume after the 5-hour limit: status | cancel | now',
@@ -403,7 +454,7 @@ export const register: Register = (on, options) => {
     const pending = await read($, pendingAtom)
     const override = await read($, overrideAtom)
     const lines = [
-      `mode ${cfg.mode}, threshold ${cfg.threshold}%, delay ${cfg.delayMs / MINUTE} min, Windows fallback ${!cfg.useOsFallback ? 'off' : isWindows ? 'on' : 'off (not Windows)'}`,
+      `mode ${cfg.mode}, threshold ${cfg.threshold}%, delay ${cfg.delayMs / MINUTE} min, Windows fallback ${!cfg.useOsFallback ? 'off' : isWindows ? 'on' : 'off (not Windows)'}${isBackground ? ', background session' : ''}`,
       fiveHour
         ? `5-hour window: ${fiveHour.percentUsed}% used` +
           (fiveHour.resetsAt ? `, resets ${clockTime(Date.parse(fiveHour.resetsAt))}` : '')

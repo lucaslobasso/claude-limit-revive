@@ -1,6 +1,6 @@
 {
   "name": "limit-revive",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "When the 5-hour usage limit passes a set percent with work unfinished, resume the session automatically at reset + N minutes.",
   "author": {
     "name": "Lucas Lobasso",
