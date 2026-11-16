@@ -16,7 +16,7 @@ type World = {
 }
 
 /** Stands for the engine beneath the plugin, recording what it is asked. */
-function engine(on: On, five?: Partial<SessionRateLimit>) {
+function engine(on: On, five?: Partial<SessionRateLimit>, os: string | undefined = 'Windows_NT') {
   const world: World = {
     five: five ? { kind: 'five_hour', percentUsed: 50, resetsAt: RESET, ...five } : undefined,
     submits: [],
@@ -34,6 +34,7 @@ function engine(on: On, five?: Partial<SessionRateLimit>) {
     },
   }))
   on('session.id', () => ({ value: 'abcdef1234567890' }))
+  on('env.get', (_, e) => ({ value: e.name === 'OS' ? os : undefined }))
   on('command.register', () => ({ value: { command: 'limit-revive' } }))
   on('ui.status', () => ({ value: undefined }))
   on('ui.toast', () => ({ value: undefined }))
@@ -198,4 +199,20 @@ test('still over at fire time with a new reset: re-armed, not submitted', {
   world.five = { kind: 'five_hour', percentUsed: 0, resetsAt: '2026-11-15T20:00:00Z' }
   await clock.set(Date.parse(later) + 5 * MIN)
   expect(world.submits.length).toBe(1)
+})
+
+test('off Windows: the session still resumes, but no scheduled task is made', async ($, on) => {
+  const { world, clock } = engine(on, { percentUsed: 100 }, 'Linux')
+  await start($)
+  await $.turn.start({ text: 'go', turnId: 't1' })
+  await measure($, world)
+  await complete($, 't1', 'error')
+
+  expect(world.created).toEqual([])
+  world.five = { kind: 'five_hour', percentUsed: 0, resetsAt: '2026-11-15T19:00:00Z' }
+  await clock.set(RESUME_AT)
+  expect(world.submits).toEqual([
+    'The usage limit has reset. Continue exactly where you left off.',
+  ])
+  expect(world.deleted).toEqual([])
 })

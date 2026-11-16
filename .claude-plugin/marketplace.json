@@ -1,11 +1,18 @@
 {
   "name": "claude-limit-revive",
-  "owner": { "name": "lucaslobasso" },
+  "owner": { "name": "Lucas Lobasso", "url": "https://github.com/lucaslobasso" },
+  "metadata": {
+    "description": "Resume a Claude Code session after the 5-hour usage limit resets",
+    "version": "1.0.0"
+  },
   "plugins": [
     {
       "name": "limit-revive",
       "source": "./",
-      "description": "Auto-resume a session after the 5-hour usage limit resets (+N minutes), only when work is unfinished."
+      "description": "Auto-resume a session after the 5-hour usage limit resets (+N minutes), only when work is unfinished.",
+      "version": "1.0.0",
+      "category": "productivity",
+      "keywords": ["usage", "rate-limit", "resume", "automation"]
     }
   ]
 }

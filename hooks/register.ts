@@ -67,6 +67,9 @@ let cfg = {
   useOsFallback: true,
 }
 
+// The fallback uses Task Scheduler, so it only runs on Windows (set at session start).
+let isWindows = false
+
 // Module variables start over on a reload; the durable parts live in $.state.
 let timer: Timer | undefined
 let mainTurnId: string | undefined
@@ -195,7 +198,7 @@ async function arm(
     resumeAt: Date.parse(resetsAt) + cfg.delayMs,
     ...(heldText !== undefined ? { heldText } : {}),
   }
-  if (cfg.useOsFallback) {
+  if (cfg.useOsFallback && isWindows) {
     const taskName = await scheduleOsTask($, pending)
     if (taskName) pending.taskName = taskName
   }
@@ -266,6 +269,7 @@ export const register: Register = (on, options) => {
 
   on('session.start', async ($, e, next) => {
     cwd = e.cwd
+    isWindows = (await $.env.get('OS')) === 'Windows_NT'
     await $.command.register({
       name: PLUGIN,
       description: 'Auto-resume after the 5-hour limit: status | cancel | now',
@@ -399,7 +403,7 @@ export const register: Register = (on, options) => {
     const pending = await read($, pendingAtom)
     const override = await read($, overrideAtom)
     const lines = [
-      `mode ${cfg.mode}, threshold ${cfg.threshold}%, delay ${cfg.delayMs / MINUTE} min, Windows fallback ${cfg.useOsFallback ? 'on' : 'off'}`,
+      `mode ${cfg.mode}, threshold ${cfg.threshold}%, delay ${cfg.delayMs / MINUTE} min, Windows fallback ${!cfg.useOsFallback ? 'off' : isWindows ? 'on' : 'off (not Windows)'}`,
       fiveHour
         ? `5-hour window: ${fiveHour.percentUsed}% used` +
           (fiveHour.resetsAt ? `, resets ${clockTime(Date.parse(fiveHour.resetsAt))}` : '')
