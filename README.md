@@ -8,6 +8,7 @@
 
 <p align="center">
   <img src="docs/status.png" alt="Screenshot: /limit-revive status showing the mode, threshold, delay, the 5-hour window at 55% and nothing scheduled" width="760">
+  <img width="661" height="111" alt="image" src="https://github.com/user-attachments/assets/b8c96f75-776b-465c-9f93-7a3591dcc88c" />
 </p>
 
 A Claude Code plugin that picks a session back up after the 5-hour usage limit resets. When the limit is close **and there is unfinished work**, it schedules a resume for the reset time plus a few minutes and then sends "continue where you left off" into the same session. Work that already finished is never "continued".
