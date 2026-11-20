@@ -1,17 +1,18 @@
 {
   "name": "limit-revive",
-  "version": "1.0.1",
-  "description": "When the 5-hour usage limit passes a set percent with work unfinished, resume the session automatically at reset + N minutes.",
+  "version": "2.0.0",
+  "description": "When the 5-hour or weekly usage limit passes a set percent with work unfinished, resume the session automatically at reset + N minutes; when the weekly reset is too far off, stop cleanly instead.",
   "author": {
     "name": "Lucas Lobasso",
     "url": "https://github.com/lucaslobasso"
   },
-  "homepage": "https://github.com/lucaslobasso/claude-limit-revive",
-  "repository": "https://github.com/lucaslobasso/claude-limit-revive",
+  "homepage": "https://github.com/lucaslobasso/claude-sessions",
+  "repository": "https://github.com/lucaslobasso/claude-sessions",
   "license": "MIT",
   "keywords": [
     "usage",
     "rate-limit",
+    "weekly-limit",
     "resume",
     "automation"
   ],
@@ -51,6 +52,35 @@
       "title": "Windows Task Scheduler fallback",
       "description": "Windows only: also schedule a one-shot Task Scheduler job that reopens the session (claude --resume) if its window was closed. Ignored on macOS and Linux.",
       "default": true
+    },
+    "weeklyEnabled": {
+      "type": "boolean",
+      "title": "Watch the weekly limit",
+      "description": "Also act on the weekly (7-day) usage limit, so a revive never resumes into an exhausted week.",
+      "default": true
+    },
+    "weeklyThresholdPercent": {
+      "type": "number",
+      "title": "Weekly threshold (%)",
+      "description": "Weekly usage percent at which limit-revive gets involved.",
+      "default": 95
+    },
+    "weeklyReviveWithinHours": {
+      "type": "number",
+      "title": "Weekly revive window (hours)",
+      "description": "If the weekly limit resets within this many hours, wait for it and resume like the 5-hour revive (same mode, delay and Windows task). If it resets later, stop as Weekly mode says and schedule nothing.",
+      "default": 12
+    },
+    "weeklyMode": {
+      "type": "string",
+      "title": "Weekly mode",
+      "description": "When the weekly reset is further away than the revive window. finish-turn: let the running turn finish, then hold off new prompts until the reset. stop-now: abort the running turn once. notify-only: a toast and a note to Claude, nothing stopped. /limit-revive cancel pushes through until the reset.",
+      "options": [
+        "finish-turn",
+        "stop-now",
+        "notify-only"
+      ],
+      "default": "finish-turn"
     }
   }
 }

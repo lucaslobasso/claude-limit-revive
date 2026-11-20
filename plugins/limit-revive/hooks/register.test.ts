@@ -6,10 +6,19 @@ const MIN = 60_000
 const T0 = Date.parse('2026-11-15T12:00:00Z')
 const RESET = '2026-11-15T14:00:00Z'
 const RESUME_AT = Date.parse(RESET) + 5 * MIN
+/** A weekly reset within the 12-hour revive window, and one days away. */
+const WEEK_NEAR = '2026-11-15T20:00:00Z'
+const WEEK_FAR = '2026-11-18T12:00:00Z'
+const WEEK_RESUME_AT = Date.parse(WEEK_NEAR) + 5 * MIN
+const TOOL = 'mcp__limit-revive__limit_revive'
 
 type World = {
   five: SessionRateLimit | undefined
+  /** The weekly window; undefined unless a test gives one. */
+  week: SessionRateLimit | undefined
   submits: string[]
+  /** What the plugin appended for the model to read. */
+  notes: string[]
   aborts: string[]
   created: string[]
   deleted: string[]
@@ -17,17 +26,29 @@ type World = {
   actions: { exe: string; args: string; cwd: string }[]
 }
 
-/** The machine beneath: its OS, whether the session is a background job, what `where.exe` finds. */
-type Host = { os?: string; jobDir?: string; where?: Record<string, string> }
+/**
+ * The machine beneath: its OS, whether the session is a background job, what
+ * `where.exe` finds; and the weekly window's reading, if any.
+ */
+type Host = {
+  os?: string
+  jobDir?: string
+  where?: Record<string, string>
+  week?: Partial<SessionRateLimit>
+}
+const limitsOf = (world: World) =>
+  [world.five, world.week].filter((limit): limit is SessionRateLimit => limit !== undefined)
 const WT = 'C:\\Users\\me\\AppData\\Local\\Microsoft\\WindowsApps\\wt.exe'
 const FOUND = { claude: 'C:\\bin\\claude\r\nC:\\bin\\claude.exe\r\n', wt: `${WT}\r\n` }
 
 /** Stands for the engine beneath the plugin, recording what it is asked. */
 function engine(on: On, five?: Partial<SessionRateLimit>, host: Host = {}) {
-  const { os = 'Windows_NT', jobDir, where = FOUND } = host
+  const { os = 'Windows_NT', jobDir, where = FOUND, week } = host
   const world: World = {
     five: five ? { kind: 'five_hour', percentUsed: 50, resetsAt: RESET, ...five } : undefined,
+    week: week ? { kind: 'seven_day', percentUsed: 50, resetsAt: WEEK_NEAR, ...week } : undefined,
     submits: [],
+    notes: [],
     aborts: [],
     created: [],
     deleted: [],
@@ -39,9 +60,15 @@ function engine(on: On, five?: Partial<SessionRateLimit>, host: Host = {}) {
     value: {
       startedAt: T0,
       context: { window: 200_000 },
-      rateLimits: world.five ? [world.five] : [],
+      rateLimits: limitsOf(world),
     },
   }))
+  on('session.append', (_, e, next) => {
+    const block = e.message.content?.[0] as { text?: string } | undefined
+    world.notes.push(block?.text ?? '')
+    return next(e)
+  })
+  on('tool.register', (_, e) => ({ value: { tool: `mcp__limit-revive__${e.name}` } }))
   on('session.id', () => ({ value: 'abcdef1234567890' }))
   on('env.get', (_, e) => ({
     value: e.name === 'OS' ? os : e.name === 'CLAUDE_JOB_DIR' ? jobDir : undefined,
@@ -96,7 +123,7 @@ const start = ($: Engine) =>
 const measure = ($: Engine, world: World) =>
   $.session.measure({
     context: { window: 200_000 },
-    rateLimits: world.five ? [world.five] : [],
+    rateLimits: limitsOf(world),
     changed: ['rateLimits'],
   })
 
@@ -280,6 +307,185 @@ test('without Windows Terminal the task starts claude itself', async ($, on) => 
 test('claude not on PATH: no task that could only fail, the timer still resumes', async ($, on) => {
   const { world, clock } = await limitHit($, on, { where: {} })
   expect(world.created).toEqual([])
+
+  world.five = { kind: 'five_hour', percentUsed: 0, resetsAt: '2026-11-15T19:00:00Z' }
+  await clock.set(RESUME_AT)
+  expect(world.submits).toEqual([PROMPT])
+})
+
+// ---- The weekly window -------------------------------------------------
+
+const NEXT_WEEK = '2026-11-22T20:00:00Z'
+const callTool = ($: Engine, action: string) =>
+  $.tool.call({ tool: TOOL, action }) as Promise<{ result?: unknown; deny?: string }>
+
+test('weekly over with its reset within 12 h: arms on the weekly reset + delay', async ($, on) => {
+  const { world, clock } = engine(on, { percentUsed: 50 }, { week: { percentUsed: 96 } })
+  await start($)
+  await $.turn.start({ text: 'go', turnId: 't1' })
+  await complete($, 't1', 'error')
+  expect(world.created).toEqual(['ClaudeLimitRevive_abcdef12'])
+
+  // The 5-hour reset passes: the week is still out, nothing resumes.
+  world.five = { kind: 'five_hour', percentUsed: 0, resetsAt: '2026-11-15T19:00:00Z' }
+  await clock.set(RESUME_AT)
+  await clock.set(WEEK_RESUME_AT - 1)
+  expect(world.submits).toEqual([])
+
+  world.week = { kind: 'seven_day', percentUsed: 0, resetsAt: NEXT_WEEK }
+  await clock.set(WEEK_RESUME_AT)
+  expect(world.submits).toEqual([PROMPT])
+})
+
+test('weekly far off, finish-turn: prompts dropped, nothing scheduled', async ($, on) => {
+  const { world, clock } = engine(on, { percentUsed: 50 }, { week: { percentUsed: 97, resetsAt: WEEK_FAR } })
+  await start($)
+  await $.turn.start({ text: 'go', turnId: 't1' })
+  await measure($, world)
+  expect(world.aborts).toEqual([])
+  await complete($, 't1', 'error')
+
+  const dropped = await typed($, 'one more thing')
+  expect('drop' in dropped).toBe(true)
+  expect(String((dropped as { drop: string }).drop)).toContain('weekly limit')
+  expect(world.created).toEqual([])
+  await clock.set(Date.parse(WEEK_FAR) + 10 * MIN)
+  expect(world.submits).toEqual([])
+
+  const status = await callTool($, 'status')
+  expect(String(status.result)).toContain('weekly:')
+})
+
+test('weekly far off, stop-now: the main turn is aborted once, nothing scheduled', {
+  options: { weeklyMode: 'stop-now' },
+}, async ($, on) => {
+  const { world, clock } = engine(on, { percentUsed: 50 }, { week: { percentUsed: 97, resetsAt: WEEK_FAR } })
+  await start($)
+  await $.turn.start({ text: 'go', turnId: 't1' })
+  await measure($, world)
+  await clock.advance(0)
+  await measure($, world)
+  await clock.advance(0)
+
+  expect(world.aborts).toEqual(['t1'])
+  await complete($, 't1', 'aborted')
+  expect(world.created).toEqual([])
+  await clock.set(Date.parse(WEEK_FAR) + 10 * MIN)
+  expect(world.submits).toEqual([])
+})
+
+test('weekly far off, notify-only: no abort, no drop, one note to the model', {
+  options: { weeklyMode: 'notify-only' },
+}, async ($, on) => {
+  const { world } = engine(on, { percentUsed: 50 }, { week: { percentUsed: 97, resetsAt: WEEK_FAR } })
+  await start($)
+  await $.turn.start({ text: 'go', turnId: 't1' })
+  await measure($, world)
+  await measure($, world)
+  await complete($, 't1', 'answer')
+
+  expect(world.aborts).toEqual([])
+  expect(world.notes.length).toBe(1)
+  expect(world.notes[0]).toContain('weekly')
+  await typed($, 'keep going')
+  expect(world.submits).toEqual(['keep going'])
+  expect(world.created).toEqual([])
+})
+
+test('/limit-revive cancel lifts a weekly stop until the reset', async ($, on) => {
+  const { world } = engine(on, { percentUsed: 50 }, { week: { percentUsed: 97, resetsAt: WEEK_FAR } })
+  await start($)
+  expect('drop' in (await typed($, 'first'))).toBe(true)
+
+  const cancelled = await callTool($, 'cancel')
+  expect(String(cancelled.result)).toContain('Weekly stop lifted')
+  await typed($, 'second')
+  expect(world.submits).toEqual(['second'])
+})
+
+test('5-hour limit with the week out and far off: no 5-hour revive', async ($, on) => {
+  const { world, clock } = engine(on, { percentUsed: 100 }, { week: { percentUsed: 98, resetsAt: WEEK_FAR } })
+  await start($)
+  await $.turn.start({ text: 'go', turnId: 't1' })
+  await complete($, 't1', 'error')
+  expect(world.created).toEqual([])
+
+  world.five = { kind: 'five_hour', percentUsed: 0, resetsAt: '2026-11-15T19:00:00Z' }
+  await clock.set(RESUME_AT + 10 * MIN)
+  expect(world.submits).toEqual([])
+})
+
+test('the week runs out before the 5-hour revive fires: it is dropped, not resumed', async ($, on) => {
+  const { world, clock } = await limitHit($, on)
+  expect(world.created.length).toBe(1)
+
+  world.five = { kind: 'five_hour', percentUsed: 0, resetsAt: '2026-11-15T19:00:00Z' }
+  world.week = { kind: 'seven_day', percentUsed: 99, resetsAt: WEEK_FAR }
+  await clock.set(RESUME_AT)
+  expect(world.submits).toEqual([])
+  expect(world.deleted).toEqual(['ClaudeLimitRevive_abcdef12'])
+  expect(world.created.length).toBe(1)
+})
+
+test('5-hour limit with the week out but resetting within 12 h: arms on the weekly reset', {
+  options: { windowsFallback: false },
+}, async ($, on) => {
+  const { world, clock } = engine(on, { percentUsed: 100 }, { week: { percentUsed: 96 } })
+  await start($)
+  await $.turn.start({ text: 'go', turnId: 't1' })
+  await complete($, 't1', 'error')
+
+  world.five = { kind: 'five_hour', percentUsed: 0, resetsAt: '2026-11-15T19:00:00Z' }
+  await clock.set(RESUME_AT)
+  expect(world.submits).toEqual([])
+
+  world.week = { kind: 'seven_day', percentUsed: 0, resetsAt: NEXT_WEEK }
+  await clock.set(WEEK_RESUME_AT)
+  expect(world.submits).toEqual([PROMPT])
+})
+
+// ---- The model's side ----------------------------------------------------
+
+test('crossing the 5-hour threshold in a turn notes it to the model once', async ($, on) => {
+  const { world } = engine(on, { percentUsed: 92 })
+  await start($)
+  await $.turn.start({ text: 'go', turnId: 't1' })
+  await measure($, world)
+  await measure($, world)
+
+  expect(world.notes.length).toBe(1)
+  expect(world.notes[0]).toContain('limit_revive')
+})
+
+test('the tool: status, arm (survives its own turn), cancel', async ($, on) => {
+  const { world, clock } = engine(on, { percentUsed: 92 })
+  await start($)
+  await $.turn.start({ text: 'go', turnId: 't1' })
+
+  const status = await callTool($, 'status')
+  expect(String(status.result)).toContain('5-hour window: 92% used')
+
+  const armed = await callTool($, 'arm')
+  expect(String(armed.result)).toContain('Armed')
+  expect(world.created).toEqual(['ClaudeLimitRevive_abcdef12'])
+
+  // The model wraps up and answers: the revive it asked for stays.
+  await complete($, 't1', 'answer')
+  expect(world.deleted).toEqual([])
+
+  const cancelled = await callTool($, 'cancel')
+  expect(String(cancelled.result)).toContain('Revive cancelled')
+  expect(world.deleted).toEqual(['ClaudeLimitRevive_abcdef12'])
+  await clock.set(RESUME_AT + MIN)
+  expect(world.submits).toEqual([])
+})
+
+test('a revive the model armed is resumed at the reset', async ($, on) => {
+  const { world, clock } = engine(on, { percentUsed: 92 })
+  await start($)
+  await $.turn.start({ text: 'go', turnId: 't1' })
+  await callTool($, 'arm')
+  await complete($, 't1', 'answer')
 
   world.five = { kind: 'five_hour', percentUsed: 0, resetsAt: '2026-11-15T19:00:00Z' }
   await clock.set(RESUME_AT)

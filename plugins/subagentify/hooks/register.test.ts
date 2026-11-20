@@ -1,5 +1,6 @@
 import { expect, test } from 'claude-code/testing'
-import type { On } from 'claude-code'
+import type { AgentSpawnInput, On } from 'claude-code'
+import type { Engine } from 'claude-code/testing'
 
 /** Stands for the engine beneath: records the model each spawn reaches and each classify call. */
 function engine(on: On, classify: () => string | undefined = () => 'opus') {
@@ -23,8 +24,14 @@ const COMPOSE = {
   model: 'claude-opus-4-5', promptModel: 'claude-opus-4-5', surfaces: [], tools: [], outputStyle: null, traits: [],
 } as const
 
-const spawn = ($: Parameters<Parameters<typeof test>[2]>[0], model?: string, extra: object = {}) =>
-  $.agent.spawn({ prompt: 'Add a unit test for parse()', description: 'write tests', ...(model ? { model } : {}), ...extra })
+// The engine fills the pinned keys (tool_use_id, provider, parentModel...); the hook reads only these.
+const spawn = ($: Engine, model?: string, extra: object = {}) =>
+  $.agent.spawn({
+    prompt: 'Add a unit test for parse()',
+    description: 'write tests',
+    ...(model ? { model } : {}),
+    ...extra,
+  } as unknown as AgentSpawnInput)
 
 test('the planning rule is appended as a session section', async ($, on) => {
   engine(on)
