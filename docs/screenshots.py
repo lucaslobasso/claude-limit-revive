@@ -19,6 +19,7 @@ import urllib.request
 CAPTURE_REF = 'main'
 DOCS = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(DOCS)
+PLUGIN = os.path.join(REPO, 'plugins', 'limit-revive')
 
 # file name -> (limit-revive options, what to type)
 SHOTS = {
@@ -43,7 +44,7 @@ def shoot(capture: str, name: str, options: dict, typed: str, work: str) -> None
         '--sandbox', json.dumps(settings), '--wait', '14', '--cols', '100', '--rows', '24',
         '--from-text', re_escape(typed), '--title', 'claude',
         '--send', f'{typed}@5', '--send', '\\r@6',
-        '--', 'claude', '--plugin-dir', REPO,
+        '--', 'claude', '--plugin-dir', PLUGIN,
     ], check=True)
 
 

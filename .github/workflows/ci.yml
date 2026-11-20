@@ -8,16 +8,20 @@ on:
 jobs:
   check:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        plugin: [limit-revive, context-handoff, subagentify]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 24
       - name: Install Claude Code
         run: npm install -g @anthropic-ai/claude-code
-      - name: Validate plugin and marketplace
-        run: |
-          claude plugin validate .
-          claude plugin validate .claude-plugin/marketplace.json
-      - name: Tests
-        run: claude plugin test .
+      - name: Validate marketplace
+        run: claude plugin validate .claude-plugin/marketplace.json
+      - name: Validate ${{ matrix.plugin }}
+        run: claude plugin validate plugins/${{ matrix.plugin }}
+      - name: Test ${{ matrix.plugin }}
+        run: claude plugin test plugins/${{ matrix.plugin }}

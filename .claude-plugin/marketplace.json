@@ -1,18 +1,34 @@
 {
-  "name": "claude-limit-revive",
+  "name": "claude-sessions",
   "owner": { "name": "Lucas Lobasso", "url": "https://github.com/lucaslobasso" },
   "metadata": {
-    "description": "Resume a Claude Code session after the 5-hour usage limit resets",
-    "version": "1.0.1"
+    "description": "Session lifecycle tools for Claude Code: revive after the 5-hour and weekly limits, hand off to a fresh session before the context fills, split planned work across Opus and Sonnet subagents",
+    "version": "2.0.0"
   },
   "plugins": [
     {
       "name": "limit-revive",
-      "source": "./",
-      "description": "Auto-resume a session after the 5-hour usage limit resets (+N minutes), only when work is unfinished.",
-      "version": "1.0.1",
+      "source": "./plugins/limit-revive",
+      "description": "Auto-resume a session after the 5-hour or weekly usage limit resets, only when work is unfinished; stop at the weekly threshold when its reset is far away.",
+      "version": "2.0.0",
       "category": "productivity",
       "keywords": ["usage", "rate-limit", "resume", "automation"]
+    },
+    {
+      "name": "context-handoff",
+      "source": "./plugins/context-handoff",
+      "description": "Past a context-fill threshold, have Claude write a handoff file and continue in a fresh session on the same model in auto mode.",
+      "version": "1.0.0",
+      "category": "productivity",
+      "keywords": ["context", "handoff", "session", "automation"]
+    },
+    {
+      "name": "subagentify",
+      "source": "./plugins/subagentify",
+      "description": "When Claude plans, split the work into subagents and run each on Opus or Sonnet as the task requires.",
+      "version": "1.0.0",
+      "category": "productivity",
+      "keywords": ["subagents", "planning", "model", "delegation"]
     }
   ]
 }
