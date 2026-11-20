@@ -1,0 +1,43 @@
+{
+  "name": "subagentify",
+  "version": "1.0.0",
+  "description": "Plans split into subagents with an explicit model: Opus for judgment, Sonnet for well-specified work. Adds the rule to the system prompt and fills in any subagent spawned without one.",
+  "author": {
+    "name": "Lucas Lobasso",
+    "url": "https://github.com/lucaslobasso"
+  },
+  "homepage": "https://github.com/lucaslobasso/claude-sessions",
+  "repository": "https://github.com/lucaslobasso/claude-sessions",
+  "license": "MIT",
+  "keywords": [
+    "subagents",
+    "planning",
+    "models",
+    "opus",
+    "sonnet"
+  ],
+  "userConfig": {
+    "enabled": {
+      "type": "boolean",
+      "title": "Enabled",
+      "description": "Add the planning rule to the system prompt and route subagent models. Off: both hooks pass through.",
+      "default": true
+    },
+    "classifyFallback": {
+      "type": "boolean",
+      "title": "Classify when no model is given",
+      "description": "A subagent spawned without Opus or Sonnet is classified by a small model as an Opus or Sonnet task. Off: it gets the default model.",
+      "default": true
+    },
+    "defaultModel": {
+      "type": "string",
+      "title": "Default model",
+      "description": "Model for a subagent that names none, when classification is off or fails.",
+      "options": [
+        "opus",
+        "sonnet"
+      ],
+      "default": "sonnet"
+    }
+  }
+}

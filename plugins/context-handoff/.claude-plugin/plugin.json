@@ -1,0 +1,70 @@
+{
+  "name": "context-handoff",
+  "version": "1.0.0",
+  "description": "When the context window passes a set percent, Claude writes a handoff file and a fresh session on the same model continues from it.",
+  "author": {
+    "name": "Lucas Lobasso",
+    "url": "https://github.com/lucaslobasso"
+  },
+  "homepage": "https://github.com/lucaslobasso/claude-sessions",
+  "repository": "https://github.com/lucaslobasso/claude-sessions",
+  "license": "MIT",
+  "keywords": [
+    "context",
+    "handoff",
+    "session",
+    "automation"
+  ],
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "thresholdPercent": {
+      "type": "number",
+      "title": "Threshold (%)",
+      "description": "Context window fill at which context-handoff gets involved. Keep it below the auto-compact point, or compaction happens first.",
+      "default": 75
+    },
+    "mode": {
+      "type": "string",
+      "title": "Mode",
+      "description": "finish-turn: let the running turn finish, then write the handoff. stop-now: abort the running turn at the threshold and write the handoff at once. notify-only: only tell you and Claude that the context is filling.",
+      "options": [
+        "finish-turn",
+        "stop-now",
+        "notify-only"
+      ],
+      "default": "finish-turn"
+    },
+    "handoffDir": {
+      "type": "string",
+      "title": "Handoff folder",
+      "description": "Where handoff files are written. Empty means ~/.claude/handoffs.",
+      "default": ""
+    },
+    "permissionMode": {
+      "type": "string",
+      "title": "Permission mode of the new session",
+      "description": "Passed to the new session as --permission-mode.",
+      "options": [
+        "auto",
+        "acceptEdits",
+        "manual",
+        "bypassPermissions",
+        "dontAsk",
+        "plan"
+      ],
+      "default": "auto"
+    },
+    "sameModel": {
+      "type": "boolean",
+      "title": "Same model",
+      "description": "Start the new session on the model this session uses (--model).",
+      "default": true
+    },
+    "autoLaunch": {
+      "type": "boolean",
+      "title": "Launch the new session",
+      "description": "Start the new session automatically (Windows). Off, or on macOS and Linux, you get the command to run yourself.",
+      "default": true
+    }
+  }
+}

@@ -2,6 +2,40 @@
 
 All notable changes to this project. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses [Semantic Versioning](https://semver.org/).
 
+## 2026-11-20: claude-limit-revive becomes claude-sessions
+
+The repository is now the `claude-sessions` marketplace with three plugins under `plugins/`. Install ids change from
+`limit-revive@claude-limit-revive` to `<plugin>@claude-sessions`.
+
+### limit-revive [2.0.0]
+
+#### Added
+- Weekly (`seven_day`) limit. Past `weeklyThresholdPercent` (95) with the reset within `weeklyReviveWithinHours` (12),
+  the session is revived after the weekly reset, the same way as after the 5-hour one. With the reset further away, it
+  stops according to `weeklyMode` (`finish-turn`, `stop-now`, `notify-only`) and schedules nothing.
+- The 5-hour revive checks the weekly window first, so a session is never resumed into an exhausted week.
+- `limit_revive` tool (`status`, `arm`, `cancel`) so Claude can call it, a one-time note to the model when a threshold
+  is crossed, and a `limit-revive` skill.
+- `/limit-revive status` shows the weekly window.
+
+#### Changed
+- The plugin moved to `plugins/limit-revive`, and the marketplace is now `claude-sessions`.
+
+### context-handoff [1.0.0]
+
+#### Added
+- First version. Past `thresholdPercent` (75) context fill it acts by `mode` (`finish-turn`, `stop-now`,
+  `notify-only`). Claude writes a self-contained handoff file to `~/.claude/handoffs/`, and the `context_handoff` tool
+  starts a new session on the same model with `--permission-mode auto`. That session reads the file, deletes it and
+  continues. `/context-handoff status|now|cancel`, and a `context-handoff` skill.
+
+### subagentify [1.0.0]
+
+#### Added
+- First version: a system-prompt rule and a `subagentify` skill. Planned work is split into subagents, Opus for work
+  that needs judgment and Sonnet for well-specified work. Any spawn not on opus/sonnet gets one picked by a Haiku
+  classifier (fallback `defaultModel`).
+
 ## [1.0.1] - 2026-11-16
 
 ### Fixed
@@ -27,3 +61,4 @@ All notable changes to this project. The format follows [Keep a Changelog](https
 [1.0.1]: https://github.com/lucaslobasso/claude-limit-revive/compare/limit-revive--v1.0.0...limit-revive--v1.0.1
 [1.0.0]: https://github.com/lucaslobasso/claude-limit-revive/compare/limit-revive--v0.1.0...limit-revive--v1.0.0
 [0.1.0]: https://github.com/lucaslobasso/claude-limit-revive/releases/tag/limit-revive--v0.1.0
+[2.0.0]: https://github.com/lucaslobasso/claude-sessions/compare/limit-revive--v1.0.1...limit-revive--v2.0.0
