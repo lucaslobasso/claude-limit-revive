@@ -74,8 +74,11 @@ function engine(on: On, percent?: number, host: Host = {}) {
     return { value: undefined }
   })
   on('fs.read', (_, e) => {
-    const text = world.files[e.path]
-    if (text === undefined) throw new Error('ENOENT')
+    // The fixtures use Windows paths. On a Linux host (CI) the engine resolves them against the
+    // plugin folder ("/w/plugins/context-handoff/C:\Users\..."), so match by suffix, not exactly.
+    const key = Object.keys(world.files).find(name => e.path === name || e.path.endsWith(`/${name}`))
+    const text = key === undefined ? undefined : world.files[key]
+    if (text === undefined) throw new Error(`ENOENT ${e.path}`)
     return { value: text }
   })
   on('process.run', (_, e) => {
